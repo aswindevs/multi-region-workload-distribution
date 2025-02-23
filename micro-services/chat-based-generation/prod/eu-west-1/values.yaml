@@ -1,0 +1,7 @@
+base:
+  image:
+    repository: docker.pkg.dev/productionapplication/chat-based-generation
+    tag: v1
+  labels:
+    all:
+      region: eu-west-1

@@ -1,0 +1,10 @@
+base:
+  appName: ai-service ### workload name
+  labels:
+    all:
+      workload-name: ai-service
+  annotations:
+    deployments:
+      reloader.stakater.com/auto: "true" ## For stakater
+  envFromSecrets:
+    - secretName: common-secrets

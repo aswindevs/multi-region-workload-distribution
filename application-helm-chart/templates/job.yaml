@@ -1,0 +1,365 @@
+{{- range $key, $value :=  $.Values.jobs }}
+{{- $job := . }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "helper.fullname" (merge . $) }}
+  namespace: {{ $.Release.Namespace }}
+  {{- if or $.Values.base.labels.all $.Values.base.labels.jobs .labels }}
+  labels:
+  {{- (include "helper.labels" $) | nindent 4 }}
+  {{- with .labels }}
+  {{- toYaml . | nindent 4}}
+  {{- end }}
+  {{- with $.Values.base.labels.jobs }}
+  {{- toYaml . | nindent 4}}
+  {{- end }}
+  {{- end }}
+  {{- if or $.Values.base.labels.all $.Values.base.labels.jobs .annotations }}
+  annotations:
+  {{- (include "helper.annotations" $) | nindent 4 }}
+  {{- with $.Values.base.annotations.jobs }}
+  {{- toYaml . | nindent 4}}
+  {{- end }}
+  {{- with .annotations }}
+  {{- toYaml . | nindent 4}}
+  {{- end }}
+  {{- end }}
+spec:
+  backoffLimit: {{ default 0 .onFailureRetryCount }}
+  parallelism: {{ default 1 .parallelism }}
+  template:
+    metadata:
+      labels:
+  {{- (include "helper.labels" $) | nindent 8}}
+    spec:
+      {{- if .serviceAccount }}
+      {{- if .serviceAccount.create }}
+      serviceAccountName: {{ .serviceAccount.name | default (print (include "helper.fullname" .))}}
+      {{- else }}
+      serviceAccountName: {{ .serviceAccount.name }}
+      {{- end }}
+      {{- end }}
+      restartPolicy: {{ default "OnFailure" .jobRestartPolicy }}
+      {{- if $.Values.base.privateDockerRepo }}
+      {{- if $.Values.base.privateDockerRepo.enabled }}
+      imagePullSecrets:
+       - name: {{ print (include "helper.name" $) "-private-docker-repo" }}
+      {{- end }}
+      {{- end }}
+      {{- if .initContainers }}
+      initContainers:
+      {{- range .initContainers }}
+      - name: {{ include "helper.fullname" (merge . $) }}
+        {{- $commonimage := print $.Values.base.image.repository ":" $.Values.base.image.tag }}
+        {{- $image := ""}}
+        {{- if .image }}
+        {{- $image = print .image.repository ":" .image.tag }}
+        {{- end}}
+        image: {{ default $commonimage $image  }}
+        envFrom:
+        {{- if and $.Values.base.configMap (not $job.excludeConfigMapFromBase )}}
+        - configMapRef:
+            name: {{ $.Values.base.configMap.name }}
+        {{- else if $job.configMap }}
+        - configMapRef: 
+            name: {{ $job.configMap.name }}
+        {{- end }}
+        {{- if and $.Values.base.envFromSecrets (not $job.excludeSecretFromBase )}}
+        {{- range $.Values.base.envFromSecrets }}
+        - secretRef:
+            name: {{ .secretName }}
+        {{- end }}
+        {{- end }}
+        {{- if and $.Values.base.externalSecrets (not $job.excludeSecretFromBase ) }}
+        {{- range $.Values.base.externalSecrets }}
+        {{- if and (.inject).enabled (not .createOnly)}}
+        - secretRef:
+            name: {{ include "helper.fullname" . }}
+        {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- if .envFromSecrets }}
+        {{- range .envFromSecrets }}
+        - secretRef:
+            name: {{ .secretName }}
+        {{- end }}
+        {{- end }}
+        env:
+        {{- if .envs }} 
+        {{- range $key,$value := .envs }}
+        - name: {{ $key | upper | quote}}
+          value: {{ $value | quote}}
+        {{- end }}
+        {{- end }}
+        {{- if $.Values.base.envs }} 
+        {{- range $key,$value := $.Values.base.envs }}
+        - name: {{ $key | upper | quote}}
+          value: {{ $value | quote}}
+        {{- end }}
+        {{- end }}
+        {{- if $.Values.base.envFrom }}
+          {{- range $.Values.base.envFrom }}
+          - name: {{ .envName }}
+            valueFrom:
+              secretKeyRef:
+                key: {{ .key }}
+                name: {{ .secretName }}
+          {{- end }}
+        {{- end }}
+        {{- if .envFrom }}
+          {{- range .envFrom }}
+          - name: {{ .envName }}
+            valueFrom:
+              secretKeyRef:
+                key: {{ .key }}
+                name: {{ .secretName }}
+          {{- end }}
+        {{- end }}
+        {{- with .extraEnv }}
+        {{ toYaml . | nindent 8 }}
+        {{- end -}}
+        {{- if .command }}
+        command:  
+        {{- range .command }} 
+          - {{  . | quote}}
+        {{- end }} 
+        {{- end }}
+        {{- if .args }}
+        args:  
+            {{- range .args }} 
+          - {{  . | quote}}
+            {{- end }} 
+        {{- end }}
+      {{- end }}
+      {{- end }}
+      containers:
+      {{- range .containers }}
+      {{- $container := . }}
+      - name: {{ print (include "helper.fullname" (merge . $)) }}
+        {{- $commonimage := print $.Values.base.image.repository ":" $.Values.base.image.tag }}
+        {{- $image := ""}}
+        {{- if .image }}
+        {{- $image = print .image.repository ":" .image.tag }}
+        {{- end }}
+        image: {{ default $commonimage $image  }}
+        {{- if $job.lifecycle }}
+        lifecycle: {{ toYaml $job.lifecycle | nindent 12 }}
+        {{- end }}
+        envFrom:
+        {{- if and $.Values.base.configMap (not $job.excludeConfigMapFromBase )}}
+        - configMapRef:
+            name: {{ $.Values.base.configMap.name }}
+        {{- else if $job.configMap }}
+        - configMapRef: 
+            name: {{ $job.configMap.name }}
+        {{- end }}
+        {{- if and $.Values.base.envFromSecrets (not $job.excludeSecretFromBase )}}
+        {{- range $.Values.base.envFromSecrets }}
+        - secretRef:
+            name: {{ .secretName }}
+        {{- end }}
+        {{- end }}
+        {{- if and $.Values.base.externalSecrets (not $job.excludeSecretFromBase ) }}
+        {{- range $.Values.base.externalSecrets }}
+        {{- $externalSecret := . }}
+        {{- if and (.inject).enabled (not .createOnly)}}
+        - secretRef:
+            name: {{ include "helper.fullname" . }}
+        {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- if .envFromSecrets }}
+        {{- range .envFromSecrets }}
+        - secretRef:
+            name: {{ .secretName }}
+        {{- end }}
+        {{- end }}
+        env:
+        {{- if .envs}}
+        {{- range $key,$value := .envs }}
+        - name: {{ $key | upper | quote}}
+          value: {{ $value | quote}}
+        {{- end }}
+        {{- end }}
+        {{- if $.Values.base.envs }} 
+        {{- range $key,$value := $.Values.base.envs }}
+          - name: {{ $key | upper | quote}}
+            value: {{ $value | quote}}
+        {{- end }}
+        {{- end }}
+        {{- if $.Values.base.envFrom }}
+          {{- range $.Values.base.envFrom }}
+          - name: {{ .envName }}
+            valueFrom:
+              secretKeyRef:
+                key: {{ .key }}
+                name: {{ .secretName }}
+          {{- end }}
+        {{- end }}
+        {{- if .envFrom }}
+          {{- range .envFrom }}
+          - name: {{ .envName }}
+            valueFrom:
+              secretKeyRef:
+                key: {{ .key }}
+                name: {{ .secretName }}
+          {{- end }}
+        {{- end }}
+        {{- with .extraEnv }}
+        {{ toYaml . | nindent 8 }}
+        {{- end -}}
+        {{- if .command }}
+        command:  
+        {{- range .command }} 
+          - {{  . | quote}}
+        {{- end }} 
+        {{- end }}
+        {{- if .args }}
+        args:  
+            {{- range .args }} 
+          - {{  . | quote}}
+            {{- end }} 
+        {{- end }}
+        resources:
+          requests:
+            cpu: {{ required "CPU requests is required" (  (((.resources).requests).cpu)  |  default ((((($.Values).base).resources).requests).cpu) ) }}
+            memory: {{ required "Memory requests is required" (  (((.resources).requests).memory)  |  default ((((($.Values).base).resources).requests).memory) ) }}
+          limits:
+          {{- if or ((((($.Values).base).resources).limits).cpu) (((.resources).limits).cpu) }}
+            cpu: {{ (((.resources).requests).cpu)  |  default ((((($.Values).base).resources).requests).cpu) }}
+          {{- end }}
+            memory: {{ required "Memory limits is required" ( (((.resources).limits).memory)  |  default ((((($.Values).base).resources).limits).memory) ) }}
+        volumeMounts:
+      {{- if or  $container.volumes $.Values.base.volumes }}
+      {{- if $container.volumes }}
+      {{- range $container.volumes }}
+      {{- $volume := . }}
+        {{- if .mountPath }}
+        - mountPath: {{ .mountPath }}
+          name: {{ .name}}
+        {{- else if .mountPaths }}
+          {{- range .mountPaths }}
+        - mountPath: {{ .mountPath }}
+          name: {{ $volume.name}}
+          subPath: {{ .subPath }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- if $.Values.base.volumes }}
+      {{- range $.Values.base.volumes }}
+      {{- $volume := . }}
+        {{- if .mountPath }}
+        - mountPath: {{ .mountPath }}
+          name: {{ .name}}
+        {{- else if .mountPaths }}
+          {{- range .mountPaths }}
+        - mountPath: {{ .mountPath }}
+          name: {{ $volume.name}}
+          subPath: {{ .subPath }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- if $.Values.base.externalSecrets }}
+      {{- range $externalSecret := $.Values.base.externalSecrets }}
+      {{- if and (.volumeMount).enabled (not .createOnly)}}
+      {{- range $data := .volumeMount.data }}
+        - mountPath: {{ .mountPath }}
+          name: {{  print (include "helper.fullname" (merge ( deepCopy $externalSecret ) $)) }}
+          subPath: {{ .fileName }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+      volumes:
+      {{- if $.Values.base.volumes }}
+      {{- range $.Values.base.volumes}}
+      - name: {{ .name }}
+      {{- if .pvcName }}
+        persistentVolumeClaim:
+          claimName: {{ .pvcName}}
+      {{- else if .secretName }}
+        secret:
+          secretName: {{ .secretName }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- range .containers }}
+      {{- if .volumes }}
+      {{- range .volumes}}
+      - name: {{ .name }}
+      {{- if .pvcName }}
+        persistentVolumeClaim:
+          claimName: {{ .pvcName}}
+      {{- else if .secretName }}
+        secret:
+          secretName: {{ .secretName }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- if .volumes }}
+      {{- range .volumes}}
+      - name: {{ .name }}
+        persistentVolumeClaim:
+          claimName: {{ .pvcName}}
+      {{- end }}
+      {{- end }}
+      {{- if $.Values.base.externalSecrets }}
+      {{- range $.Values.base.externalSecrets }}
+      {{- if and (.volumeMount).enabled (not .createOnly)}}
+      - name: {{  print (include "helper.fullname" (merge ( deepCopy . ) $)) }}
+        secret:
+          secretName: {{  print (include "helper.fullname" (merge ( deepCopy . ) $)) }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- with .nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+{{- if .serviceAccount }}
+{{- if .serviceAccount.create }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .serviceAccount.name | default (print (include "helper.fullname" .) )}}
+  namespace: {{ $.Release.Namespace }}
+  {{- if or $.Values.base.labels.all $.Values.base.labels.jobs .labels }}
+  labels:
+  {{- (include "helper.labels" $) | nindent 4 }}
+  {{- with .labels }}
+  {{- toYaml . | nindent 4}}
+  {{- end }}
+  {{- with $.Values.base.labels.jobs }}
+  {{- toYaml . | nindent 4}}
+  {{- end }}
+  {{- end }}
+  {{- if or $.Values.base.labels.all $.Values.base.labels.jobs .annotations }}
+  annotations:
+  {{- (include "helper.annotations" $) | nindent 4 }}
+  {{- with $.Values.base.annotations.jobs }}
+  {{- toYaml . | nindent 4}}
+  {{- end }}
+  {{- with .annotations }}
+  {{- toYaml . | nindent 4}}
+  {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

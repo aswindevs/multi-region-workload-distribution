@@ -1,0 +1,193 @@
+base:
+  appName: sample
+  image:
+    repository: gcr.io/dssdsda
+    tag: v1
+  volumes:
+    - name: export-pvc
+      pvcName: sample
+      mountPath: /resource
+  envFromSecrets:
+    - secretName: sample-secret
+  envFrom:
+    - key: RABBIT_URL
+      secretName: common-envs
+    - key: SAMP
+      secretName: common-envs
+  envs: 
+    KEY: SAMPLE
+    KEY2: VALUE
+  annotations:
+    all:
+      env: stg
+    deployments:
+      reloader.stakater.com/search: "true" ## For stakater
+  labels:
+    all:
+      service-name: sample-svc
+  resources:
+    requests:
+      cpu: 100m
+      memory: 500Mi
+    limits:
+      memory: 500Mi
+  replicaCount: 1
+  configMap:
+    name: sample-service-config
+  keda:
+    authenticationRef: sadsadad
+  topologySpreadConstraints:
+   - ...
+  externalSecrets:
+    - name: abcd
+      createOnly: true
+      refreshInterval: 1h
+      secretStoreName: gcp-secret-manager
+      inject: 
+        enabled: true
+        dataFrom:
+            secretKey: mysecret
+        data:
+          - secretKey: mysecret
+            remoteRef:
+              key: mysecret
+      volumeMount:    ## Use either volume mount or inject
+        enabled: false
+        data:  
+          - fileName: ".env"
+            mountPath: "/app/.env"
+            secretKey: gcp-secret-name
+          - fileName: ".env2"
+            mountPath: "/app/.env2"
+            secretKey: gcp-secret-name
+    
+
+deployments:
+  server:
+    name: server
+    replicaCount: 2
+    excludeConfigMapFromBase: true
+    excludeSecretFromBase: true
+    podDisruptionBudget:
+      enabled: true
+    serviceAccount:
+      create: true
+      name: sample-service
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 75
+      targetMemoryUtilizationPercentage: 80
+    lifecycle:
+      preStop:
+        exec:
+          command: ["/bin/sh", "-c", "sleep 30"]
+    service:
+      type: ClusterIP
+      ports:
+        - port: 3200
+          name: api
+          targetPort: 3200
+    nodeSelector:
+      app: gpu
+    tolerations:
+    - test: sample
+    containers:
+      - fullnameOverride: sample-server
+        port: 3200
+        volumes:
+        - name: export-pvc
+          pvcName: sample  ## Use pvcName or SecretName to explicitly add volumes
+          secretName: sample-secret 
+          mountPath: /resource 
+          mountPaths:
+          - mountPath:
+            subPath: 
+        envs:
+          key: MY_NODE_NAME
+        extraEnv:
+        - name: MY_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        healthcheck:
+          enabled: true
+          livenessProbe:
+            path: "/health"
+            initialDelaySeconds: 70
+            periodSeconds: 30
+          readinessProbe:
+            path: "/health"
+            initialDelaySeconds: 70
+            periodSeconds: 30
+    topologySpreadConstraints:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: sample-server
+        maxSkew: 2
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: sample-server
+        maxSkew: 2
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+
+  worker-1:
+    fullnameOverride: worker-1
+    keda: 
+      idle: 0
+      min: 1
+      max: 5
+      trigger: 
+        queueName: xyz
+    containers:
+      - name: worker
+        volumes:    ## Use pvcName or SecretName to explicitly add volumes
+          - name: 
+            pcvName:   
+            secretName:
+            mountPath: 
+        command:
+          - /bin/sh
+          - -c
+          - 'npm run worker:up'
+        args:
+        - dev:worker
+        - --type=productsync
+
+
+jobs:       ### Setup dbmigrate as presync job (Remove this if dbmigrate is not required)
+  dbmigrate:
+    name: dbmigrate
+    excludeConfigMapFromBase: true
+    excludeSecretFromBase: true
+    annotations:
+      argocd.argoproj.io/sync-wave: "-2"
+    onFailureRetryCount: 3
+    configMap:
+      name: sample-service-config
+    containers:
+      - name: dbmigrate
+        envFromSecrets:
+        - secretName: sample-secret
+        command:
+          - /bin/sh
+          - -c
+          - 'npm run migrate:up'
+
+cronJobs:
+  backup:
+    name: backup
+    schedule: "* * * *"
+    excludeConfigMapFromBase: true
+    excludeSecretFromBase: true
+    onFailureRetryCount: 3
+    containers:
+      - name: backup
+        command:
+          - /bin/sh
+          - -c
+          - 'npm run migrate:up'

@@ -1,0 +1,95 @@
+base:
+  image:
+    repository: docker.pkg.dev/devapplication/chat-based-generation
+    tag: v1
+  labels:
+    all:
+      region: ap-south-1
+
+deployments:
+  chat-processor:
+    name: chat-processor
+    labels:
+      component: worker
+    keda:
+      min: 2
+      max: 8
+      trigger:
+        queueName: chat_ad
+    defaultTopologySpreadConstraints: true
+    containers:
+      - name: chat-processor
+        command:
+          [
+            "poetry",
+            "run",
+            "python3",
+            "-m",
+            "src.worker",
+            "-w",
+            "CHAT_PROCESSOR",
+          ]
+        envs:
+          USE_DB_POOL: false
+        resources:
+          requests:
+            cpu: 200m
+            memory: 2Gi
+          limits:
+            memory: 3Gi
+
+  text-editor-chat-processor:
+    name: text-editor-chat-processor
+    labels:
+      component: worker
+    keda:
+      min: 2
+      max: 8
+      trigger:
+        queueName: text_editor_chat_queue
+    defaultTopologySpreadConstraints: true
+    containers:
+      - name: text-editor-chat-processor
+        command:
+          [
+            "poetry",
+            "run",
+            "python3",
+            "-m",
+            "src.worker",
+            "-w",
+            "TEXT_EDITOR_CHAT_PROCESSOR",
+          ]
+        envs:
+          USE_DB_POOL: false
+        resources:
+          requests:
+            cpu: 200m
+            memory: 2Gi
+          limits:
+            memory: 2Gi
+
+  feed-copy-generation-processor:
+    name: feed-copy-generation-processor
+    labels:
+      component: worker
+    keda:
+      min: 2
+      max: 8
+      trigger:
+        queueName: feed_copy_generation_queue
+    defaultTopologySpreadConstraints: true
+    containers:
+      - name: feed-copy-generation-processor
+        command:
+          [
+            "poetry",
+            "run",
+            "python3",
+            "-m",
+            "src.worker",
+            "-w",
+            "FEED_COPY_GENERATION_PROCESSOR",
+          ]
+        envs:
+          USE_DB_POOL: false

@@ -1,0 +1,13 @@
+namespace: prod
+
+helmGlobals:
+  chartHome: ./../../../../k8s/
+
+helmCharts:
+  - name: application-helm-chart
+    releaseName: api-server
+    valuesFile: ./values.yaml
+    namespace: prod
+    additionalValuesFiles:
+      - "../../base/base.yaml"
+      - "../global/global.yaml"

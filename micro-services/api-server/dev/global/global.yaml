@@ -1,0 +1,53 @@
+base:
+  annotations:
+    all:
+      env: dev
+  resources:
+    requests:
+      cpu: 200m
+      memory: 1Gi
+    limits:
+      memory: 1Gi
+  externalSecrets:
+    - name: secrets
+      createOnly: false
+      refreshInterval: 1m
+      secretStoreName: gcp-secret-manager
+      inject:
+        enabled: true
+        dataFrom:
+          secretKey: k8s-api-server
+
+deployments:
+  server:
+    fullnameOverride: api-server
+    labels:
+      component: server
+    defaultTopologySpreadConstraints: true
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 8
+      targetCPUUtilizationPercentage: 75
+      targetMemoryUtilizationPercentage: 80
+    podDisruptionBudget:
+      enabled: true
+    service:
+      type: ClusterIP
+      ports:
+        - port: 80
+          name: api
+          targetPort: 7979
+    containers:
+      - fullnameOverride: api-server
+        port: 7979
+        healthcheck:
+          enabled: true
+          livenessProbe:
+            path: "/v1/health"
+            initialDelaySeconds: 45
+            periodSeconds: 30
+          readinessProbe:
+            path: "/v1/health"
+            initialDelaySeconds: 45
+            periodSeconds: 30

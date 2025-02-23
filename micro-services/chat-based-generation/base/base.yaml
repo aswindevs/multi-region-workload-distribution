@@ -1,0 +1,12 @@
+base:
+  appName: chat-based-generation   ### workload name
+  labels:
+    all:
+      app: chat-based-generation
+  annotations:
+    deployments:
+      reloader.stakater.com/auto: "true" ## For stakater
+  keda:
+    authenticationRef: keda-trigger-auth-rabbitmq-conn
+  envFromSecrets:
+    - secretName: common-secrets

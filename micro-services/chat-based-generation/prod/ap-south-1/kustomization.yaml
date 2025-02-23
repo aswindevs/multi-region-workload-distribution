@@ -1,0 +1,13 @@
+namespace: prod
+
+helmGlobals:
+  chartHome: ./../../../../k8s/
+
+helmCharts:
+  - name: application-helm-chart
+    releaseName: chat-based-generation
+    valuesFile: ./values.yaml
+    namespace: prod
+    additionalValuesFiles:
+      - "../../base/base.yaml"
+      - "../global/global.yaml"

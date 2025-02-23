@@ -1,0 +1,65 @@
+base:
+  annotations:
+    all:
+      env: pro
+  resources:
+    requests:
+      cpu: 200m
+      memory: 1.5Gi
+    limits:
+      memory: 1.5Gi
+  externalSecrets:
+    - name: chat-server-secrets
+      createOnly: false
+      refreshInterval: 1m
+      secretStoreName: gcp-secret-manager
+      inject:
+        enabled: true
+        dataFrom:
+          secretKey: k8s-chat-server
+
+deployments:
+  server:
+    name: chat-server
+    labels:
+      component: server
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 75
+      targetMemoryUtilizationPercentage: 80
+    service:
+      type: ClusterIP
+      ports:
+        - port: 80
+          name: api
+          targetPort: 5600
+    defaultTopologySpreadConstraints: true
+    podDisruptionBudget:
+      enabled: true    
+    containers:
+      - fullnameOverride: chat-server
+        envs:
+          USE_DB_POOL: false
+        command:
+          [
+            "poetry",
+            "run",
+            "gunicorn",
+            "-b=0.0.0.0:5600",
+            "--timeout",
+            "120",
+            "--worker-class",
+          ]
+        port: 5600
+        healthcheck:
+          enabled: true
+          livenessProbe:
+            path: "/api/health"
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            path: "/api/health"
+            initialDelaySeconds: 60
+            periodSeconds: 30

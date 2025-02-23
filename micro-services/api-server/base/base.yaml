@@ -1,0 +1,10 @@
+base:
+  appName: api-server ### workload name
+  labels:
+    all:
+      workload-name: api-server
+  annotations:
+    deployments:
+      reloader.stakater.com/auto: "true" ## For stakater
+  envFromSecrets:
+    - secretName: common-secrets
